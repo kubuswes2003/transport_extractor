@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Project specific - SENSITIVE DATA
+pdfs/
+*.pdf
+extraction_results.json
+results/
+*.json
+
+# Credentials
+credentials.json
+*.key
+*.pem
+
+# OS
+Thumbs.db
+.DS_Store
