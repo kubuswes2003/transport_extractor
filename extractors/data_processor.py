@@ -39,18 +39,20 @@ class DataProcessor:
             print(f"🚗 TABLICA: {plate} ({len(records)} zlecenia)")
             print(f"{'='*70}")
             
-            # Table header
-            print(f"{'Nr Zlecenia':<15} {'Data':<12} {'Fracht':<10} {'Plik':<30}")
+            # Table header: Nr Zlecenia | Loading City | Unloading City | Data | Fracht | Plik
+            print(f"{'Nr Zlecenia':<15} {'Loading City':<22} {'Unloading City':<22} {'Data':<12} {'Fracht':<10} {'Plik':<30}")
             print_separator()
             
             total_fracht = 0
             for rec in records:
                 zlecenie = rec.get('zlecenie_nr', 'N/A')
+                loading_city = (rec.get('miejsce_zaladunku') or '—')[:20]
+                unloading_city = (rec.get('miejsce_rozladunku') or '—')[:20]
                 date = rec.get('termin_rozladunku', 'N/A')
                 fracht = rec.get('fracht', 0) or 0
                 file = rec.get('source_file', 'N/A')[:28]
                 
-                print(f"{zlecenie:<15} {date:<12} {fracht:<10.2f} {file:<30}")
+                print(f"{zlecenie:<15} {loading_city:<22} {unloading_city:<22} {date:<12} {fracht:<10.2f} {file:<30}")
                 total_fracht += fracht
             
             print_separator()
@@ -64,9 +66,11 @@ class DataProcessor:
             
             for rec in no_plate:
                 zlecenie = rec.get('zlecenie_nr', 'N/A')
+                loading_city = rec.get('miejsce_zaladunku') or '—'
+                unloading_city = rec.get('miejsce_rozladunku') or '—'
                 date = rec.get('termin_rozladunku', 'N/A')
                 file = rec.get('source_file', 'N/A')
-                print(f"  • {zlecenie:<15} {date:<12} - {file}")
+                print(f"  • {zlecenie:<15} {loading_city} -> {unloading_city} | {date} - {file}")
     
     def display_summary(self, total_pdfs, successful, failed, grouped, no_plate):
         """Display processing summary"""

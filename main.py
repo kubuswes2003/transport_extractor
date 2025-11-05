@@ -2,6 +2,7 @@ import os
 from extractors.pdf_reader import PDFReader
 from extractors.regex_extractor import RegexExtractor
 from extractors.data_processor import DataProcessor
+from extractors.city_extractor import CityExtractor
 from utils.helpers import print_header
 from config import PDFS_FOLDER, JSON_OUTPUT
 
@@ -13,6 +14,7 @@ class TransportExtractorApp:
         self.pdf_reader = PDFReader(PDFS_FOLDER)
         self.regex_extractor = RegexExtractor()
         self.data_processor = DataProcessor()
+        self.city_extractor = CityExtractor(use_spacy=True)
     
     def process_single_pdf(self):
         """Interactive mode - process single PDF"""
@@ -56,6 +58,25 @@ class TransportExtractorApp:
                 print_header("🔍 REGEX EXTRACTION", width=60)
                 
                 data = self.regex_extractor.extract_all_fields(text, verbose=True)
+                # Extract cities
+                loading_city, unloading_city = self.city_extractor.extract_from_text(text)
+                data['miejsce_zaladunku'] = loading_city
+                data['miejsce_rozladunku'] = unloading_city
+
+                # NER diagnostics
+                diag = self.city_extractor.ner_diagnostics()
+                print_header("🧪 NER STATUS", width=60)
+                print(f"spacy_available: {diag['spacy_available']}")
+                print(f"requested_models: {diag['requested_models']}")
+                print(f"loaded_models: {diag['loaded_models']}")
+                print(f"missing_models: {diag['missing_models']}")
+
+                # Compare methods (regex vs spaCy vs hybrid)
+                print_header("⚖️ METHOD COMPARISON", width=60)
+                cmp = self.city_extractor.compare_methods(text)
+                print(f"regex       -> zaladunek: {cmp['regex']['miejsce_zaladunku']}, rozladunek: {cmp['regex']['miejsce_rozladunku']}")
+                print(f"spacy       -> zaladunek: {cmp['spacy']['miejsce_zaladunku']}, rozladunek: {cmp['spacy']['miejsce_rozladunku']}")
+                print(f"hybrid used -> zaladunek: {cmp['hybrid']['miejsce_zaladunku']}, rozladunek: {cmp['hybrid']['miejsce_rozladunku']}")
                 
                 # Display results
                 print_header("📊 RESULTS", width=60)
@@ -109,6 +130,10 @@ class TransportExtractorApp:
                 
                 # Extract data
                 data = self.regex_extractor.extract_all_fields(text, verbose=False)
+                # Cities from full text
+                loading_city, unloading_city = self.city_extractor.extract_from_text(text)
+                data['miejsce_zaladunku'] = loading_city
+                data['miejsce_rozladunku'] = unloading_city
                 data['source_file'] = pdf_file
                 
                 # Check completeness
