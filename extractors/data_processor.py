@@ -40,19 +40,19 @@ class DataProcessor:
             print(f"{'='*70}")
             
             # Table header: Nr Zlecenia | Loading City | Unloading City | Data | Fracht | Plik
-            print(f"{'Nr Zlecenia':<15} {'Loading City':<22} {'Unloading City':<22} {'Data':<12} {'Fracht':<10} {'Plik':<30}")
+            print(f"{'Nr Zlecenia':<15} {'Loading City':<40} {'Unloading City':<60} {'Data':<12} {'Fracht':<10} {'Plik':<30}")
             print_separator()
             
             total_fracht = 0
             for rec in records:
                 zlecenie = rec.get('zlecenie_nr', 'N/A')
-                loading_city = (rec.get('miejsce_zaladunku') or '—')[:20]
-                unloading_city = (rec.get('miejsce_rozladunku') or '—')[:20]
+                loading_city = rec.get('miejsce_zaladunku') or '—'
+                unloading_city = rec.get('miejsce_rozladunku') or '—'
                 date = rec.get('termin_rozladunku', 'N/A')
                 fracht = rec.get('fracht', 0) or 0
                 file = rec.get('source_file', 'N/A')[:28]
                 
-                print(f"{zlecenie:<15} {loading_city:<22} {unloading_city:<22} {date:<12} {fracht:<10.2f} {file:<30}")
+                print(f"{zlecenie:<15} {loading_city:<40} {unloading_city:<60} {date:<12} {fracht:<10.2f} {file:<30}")
                 total_fracht += fracht
             
             print_separator()

@@ -1,10 +1,12 @@
 import os
+import json
 from extractors.pdf_reader import PDFReader
 from extractors.regex_extractor import RegexExtractor
 from extractors.data_processor import DataProcessor
 from extractors.city_extractor import CityExtractor
+from extractors.google_sheets_exporter import GoogleSheetsExporter
 from utils.helpers import print_header
-from config import PDFS_FOLDER, JSON_OUTPUT
+from config import PDFS_FOLDER, JSON_OUTPUT, GOOGLE_SHEET_ID, CREDENTIALS_FILE, ENABLE_SHEETS_EXPORT
 
 
 class TransportExtractorApp:
@@ -15,6 +17,8 @@ class TransportExtractorApp:
         self.regex_extractor = RegexExtractor()
         self.data_processor = DataProcessor()
         self.city_extractor = CityExtractor(use_spacy=True)
+        self.sheets_exporter = None  # Lazy initialization
+        self._sheets_exporter_initialized = False
     
     def process_single_pdf(self):
         """Interactive mode - process single PDF"""
@@ -96,8 +100,79 @@ class TransportExtractorApp:
         except Exception as e:
             print(f"❌ Error: {e}")
     
-    def process_all_pdfs(self):
-        """Batch mode - process all PDFs"""
+    def _get_sheets_exporter(self):
+        """Get sheets exporter with lazy initialization"""
+        if not ENABLE_SHEETS_EXPORT:
+            return None
+        
+        if not self._sheets_exporter_initialized:
+            try:
+                self.sheets_exporter = GoogleSheetsExporter(GOOGLE_SHEET_ID, CREDENTIALS_FILE)
+                self._sheets_exporter_initialized = True
+            except FileNotFoundError as e:
+                print(f"❌ {e}")
+                print("   Google Sheets export will be unavailable for this session.")
+                self.sheets_exporter = None
+                self._sheets_exporter_initialized = True
+            except Exception as e:
+                print(f"❌ Failed to initialize Google Sheets exporter: {e}")
+                self.sheets_exporter = None
+                self._sheets_exporter_initialized = True
+        
+        return self.sheets_exporter
+    
+    def export_to_sheets(self):
+        """Export last processing results to Google Sheets"""
+        print_header("📊 EXPORT TO GOOGLE SHEETS")
+        
+        sheets_exporter = self._get_sheets_exporter()
+        if not sheets_exporter:
+            if not ENABLE_SHEETS_EXPORT:
+                print("❌ Google Sheets export is disabled (ENABLE_SHEETS_EXPORT = False)")
+            return
+        
+        # Load data from JSON file
+        if not os.path.exists(JSON_OUTPUT):
+            print(f"❌ No extraction results found ({JSON_OUTPUT})")
+            print("   Please process PDFs first (option 2 or 4)")
+            return
+        
+        try:
+            with open(JSON_OUTPUT, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            grouped_by_plate = data.get('grouped_by_plate', {})
+            no_plate = data.get('no_plate', [])
+            
+            if not grouped_by_plate and not no_plate:
+                print("❌ No data to export")
+                return
+            
+            print(f"📋 Found {len(grouped_by_plate)} sheets and {len(no_plate)} orders without plate\n")
+            
+            # Export grouped orders
+            stats = sheets_exporter.export_grouped_orders(grouped_by_plate, verbose=True)
+            
+            # Handle no plate orders
+            sheets_exporter.handle_no_plate_orders(no_plate)
+            
+            # Display summary
+            print_header("📈 EXPORT SUMMARY")
+            print(f"Total orders: {stats['total']}")
+            print(f"✅ Successfully exported: {stats['success']}")
+            print(f"❌ Failed: {stats['failed']}")
+            if stats['missing_plate'] > 0:
+                print(f"⚠️  Missing plate: {stats['missing_plate']}")
+            
+        except Exception as e:
+            print(f"❌ Error exporting to Google Sheets: {e}")
+    
+    def process_all_pdfs(self, export_to_sheets: bool = False):
+        """Batch mode - process all PDFs
+        
+        Args:
+            export_to_sheets: Whether to export to Google Sheets after processing
+        """
         print_header("🔥 BATCH PROCESSING")
         
         pdf_files = self.pdf_reader.list_pdf_files()
@@ -171,6 +246,10 @@ class TransportExtractorApp:
             'unique_plates': len(grouped)
         }
         self.data_processor.save_to_json(grouped, no_plate, summary, JSON_OUTPUT)
+        
+        # Export to Google Sheets if requested
+        if export_to_sheets:
+            self.export_to_sheets()
     
     def run(self):
         """Main application loop"""
@@ -179,6 +258,8 @@ class TransportExtractorApp:
             print("Choose option:")
             print("1. Process single PDF (interactive)")
             print("2. Process ALL PDFs (batch)")
+            print("3. Export to Google Sheets (from last processing)")
+            print("4. Process ALL PDFs + Export to Sheets")
             print("0. Exit")
             
             choice = input("\nYour choice: ").strip()
@@ -189,6 +270,14 @@ class TransportExtractorApp:
             
             elif choice == '2':
                 self.process_all_pdfs()
+                input("\nPress Enter to continue...")
+            
+            elif choice == '3':
+                self.export_to_sheets()
+                input("\nPress Enter to continue...")
+            
+            elif choice == '4':
+                self.process_all_pdfs(export_to_sheets=True)
                 input("\nPress Enter to continue...")
             
             elif choice == '0':
