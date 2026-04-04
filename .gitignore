@@ -1,36 +1,54 @@
+# Credentials & Secrets
+credentials.json
+**/credentials.json
+*.pem
+*.key
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+transport_orders.db
+
+# PDFs (client data — sensitive)
+pdfs/
+*.pdf
+
+# Processing output
+extraction_results.json
+results/
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-*.pyc
+*.egg-info/
+dist/
+build/
+*.egg
 
 # Virtual environments
 venv/
 env/
-ENV/
-.venv
+.venv/
+sheets/
 
-# IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+
+# OS files
 .DS_Store
-
-# Project specific - SENSITIVE DATA
-pdfs/
-*.pdf
-extraction_results.json
-results/
-*.json
-
-# Credentials
-credentials.json
-*.key
-*.pem
-
-# OS
 Thumbs.db
-.DS_Store
+desktop.ini
+
+# GUI config (contains local paths)
+gui_config.json
+
+# Temp print files
+transport_print_*.html
