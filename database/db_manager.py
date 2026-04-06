@@ -555,29 +555,60 @@ class DatabaseManager:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def parse_week_identifier(identifier: str) -> Optional[tuple[Optional[int], int, int, int]]:
-        """Parse week identifier → (year, month, start_day, end_day) or None.
+    def parse_week_identifier(identifier: str):
+        """Parse week identifier into (monday_date, sunday_date) or None.
 
-        Supports two formats:
-          - New: 'YYYY-MM.DD-DD'  e.g. '2025-03.10-16'  → (2025, 3, 10, 16)
-          - Old: 'MM.DD-DD'       e.g. '3.10-16'         → (None, 3, 10, 16)
+        Supports formats:
+          - Cross-month: 'YYYY-MM.DD-MM.DD'  e.g. '2026-03.30-04.05'
+          - Same-month:  'YYYY-MM.DD-DD'      e.g. '2026-03.23-29'
+          - Legacy:      'MM.DD-DD'            e.g. '3.23-29' (assumes current year)
+        Returns (monday: date, sunday: date) or None.
         """
         import re
-        # New format: YYYY-MM.DD-DD
-        m = re.match(r"^(\d{4})-(\d{1,2})\.(\d{1,2})-(\d{1,2})$", identifier.strip())
+        from datetime import date as _date
+
+        s = identifier.strip()
+
+        # Cross-month: YYYY-MM.DD-MM.DD  e.g. 2026-03.30-04.05
+        m = re.match(r"^(\d{4})-(\d{1,2})\.(\d{1,2})-(\d{1,2})\.(\d{1,2})$", s)
         if m:
-            year, month = int(m.group(1)), int(m.group(2))
-            start, end = int(m.group(3)), int(m.group(4))
-            if 1 <= month <= 12 and 1 <= start <= 31 and 1 <= end <= 31:
-                return year, month, start, end
-            return None
-        # Old format: MM.DD-DD (backward compat)
-        m = re.match(r"^(\d{1,2})\.(\d{1,2})-(\d{1,2})$", identifier.strip())
+            yr = int(m.group(1))
+            m1, d1, m2, d2 = int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5))
+            try:
+                yr2 = yr + 1 if m2 < m1 else yr  # handle Dec→Jan
+                return _date(yr, m1, d1), _date(yr2, m2, d2)
+            except ValueError:
+                return None
+
+        # Same-month: YYYY-MM.DD-DD  e.g. 2026-03.23-29
+        m = re.match(r"^(\d{4})-(\d{1,2})\.(\d{1,2})-(\d{1,2})$", s)
         if m:
-            month, start, end = int(m.group(1)), int(m.group(2)), int(m.group(3))
-            if 1 <= month <= 12 and 1 <= start <= 31 and 1 <= end <= 31:
-                return None, month, start, end
+            yr, mo = int(m.group(1)), int(m.group(2))
+            d1, d2 = int(m.group(3)), int(m.group(4))
+            try:
+                return _date(yr, mo, d1), _date(yr, mo, d2)
+            except ValueError:
+                return None
+
+        # Legacy: MM.DD-DD  e.g. 3.23-29
+        m = re.match(r"^(\d{1,2})\.(\d{1,2})-(\d{1,2})$", s)
+        if m:
+            mo, d1, d2 = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            yr = _date.today().year
+            try:
+                return _date(yr, mo, d1), _date(yr, mo, d2)
+            except ValueError:
+                return None
+
         return None
+
+    @staticmethod
+    def _make_week_id(monday, next_monday):
+        """Generate a week identifier string: MM.DD-DD or MM.DD-MM.DD."""
+        if monday.month == next_monday.month:
+            return f"{monday.year}-{monday.month:02d}.{monday.day:02d}-{next_monday.day:02d}"
+        else:
+            return f"{monday.year}-{monday.month:02d}.{monday.day:02d}-{next_monday.month:02d}.{next_monday.day:02d}"
 
     def find_or_create_week_table(
         self,
@@ -585,42 +616,42 @@ class DatabaseManager:
         order_date: str,
         eur_pln_rate: float = 4.25,
     ) -> int:
-        """Find an existing week table whose date range covers *order_date*,
-        or create a new one automatically.
+        """Find an existing week table whose Monday-to-Monday range covers
+        *order_date*, or create a new one.
 
-        Week identifiers use 'YYYY-MM.DD-DD' format to prevent cross-year
-        collisions (e.g. '2025-03.10-16').
+        Weeks run Monday → next Monday (exclusive). Cross-month weeks are
+        handled correctly (e.g. '2026-03.30-04.06').
 
         Returns the week_table id.
         """
+        from datetime import timedelta
+        from datetime import date as _date
+
         try:
-            dt = datetime.strptime(order_date, "%Y-%m-%d")
+            dt = datetime.strptime(order_date, "%Y-%m-%d").date()
         except (ValueError, TypeError):
-            # Fallback: create a generic week table
-            wt_id = self.add_week_table(
+            return self.add_week_table(
                 truck_id, "unknown", eur_pln_rate=eur_pln_rate,
             )
-            return wt_id
 
-        year = dt.year
-        month = dt.month
-        day = dt.day
+        # Find Monday of this week and next Monday
+        monday = dt - timedelta(days=dt.weekday())   # weekday: 0=Mon
+        next_monday = monday + timedelta(days=7)
+        week_id = self._make_week_id(monday, next_monday)
 
-        # Check existing week tables for this truck
+        # Check existing week tables (exact match first)
         week_tables = self.get_week_tables(truck_id)
+        for wt in week_tables:
+            if wt["week_identifier"] == week_id:
+                return wt["id"]
+
+        # Backward compat: check if order date falls in any existing week's range
         for wt in week_tables:
             parsed = self.parse_week_identifier(wt["week_identifier"])
             if parsed:
-                wy, wm, ws, we = parsed
-                # Match if same month+day range AND (same year or old format with no year)
-                if wm == month and ws <= day <= we:
-                    if wy is None or wy == year:
-                        return wt["id"]
-
-        # No match — create a new week table spanning a 7-day window
-        start_day = max(1, day - (day - 1) % 7)
-        end_day = min(start_day + 6, 31)
-        week_id = f"{year}-{month:02d}.{start_day}-{end_day}"
+                wk_start, wk_end = parsed
+                if wk_start <= dt < wk_end:  # < not <= (end is exclusive)
+                    return wt["id"]
 
         return self.add_week_table(
             truck_id, week_id, eur_pln_rate=eur_pln_rate,

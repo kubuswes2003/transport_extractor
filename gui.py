@@ -75,8 +75,11 @@ class TransportGUI:
     def __init__(self):
         self.window = tk.Tk()
         self.window.title("Transport Extractor")
-        self.window.geometry("1200x820")
-        self.window.minsize(1100, 750)
+        # Auto-size to 90% of screen, capped at 1200x820
+        sw = min(int(self.window.winfo_screenwidth() * 0.9), 1200)
+        sh = min(int(self.window.winfo_screenheight() * 0.85), 820)
+        self.window.geometry(f"{sw}x{sh}")
+        self.window.minsize(900, 600)
         self.window.configure(bg=C['bg3'])
         self.processing = False; self.stop_requested = False
         self.current_folder = self._load_folder()
@@ -227,7 +230,31 @@ class TransportGUI:
             self.wv[key] = v
         tk.Button(pf, text="Save", command=self._save_wk, **_sbtn(pady=6)).grid(
             row=0, column=len(params), padx=(8,0), sticky=tk.E+tk.W)
-        # Treeview
+        # Bottom buttons (pack FIRST so they're always visible)
+        bt = tk.Frame(t, bg=C['bg']); bt.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=(0,12))
+        tk.Button(bt, text="Export CSV", command=self._csv, **_sbtn()).pack(side=tk.LEFT, padx=(0,6))
+        tk.Button(bt, text="Export JSON", command=self._json, **_sbtn()).pack(side=tk.LEFT, padx=(0,6))
+        tk.Button(bt, text="Sort by date", command=self._sort_by_date, **_sbtn()).pack(side=tk.LEFT, padx=(0,6))
+        tk.Button(bt, text="Print", command=self._print_table, **_sbtn()).pack(side=tk.LEFT)
+        tk.Button(bt, text="Add order", command=self._add_ord, **_pbtn()).pack(side=tk.RIGHT)
+        # Summary cards (pack SECOND from bottom)
+        sf = tk.Frame(t, bg=C['bg']); sf.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=(0,8))
+        self.sl = {}
+        cards = [("SUMA EUR","suma_eur",C['okb'],C['okt']),
+                 ("SUMA PO AUT","suma_po_aut_eur",C['okb'],C['okt']),
+                 ("STAWKA /km","stawka_eur",C['infb'],C['inft']),
+                 ("PO AUT /km","po_aut_eur",C['infb'],C['inft']),
+                 ("SPALANIE","fuel_consumption",C['wrnb'],C['wrnt']),
+                 ("AUTO DE EUR","auto_de_eur",C['wrnb'],C['wrnt'])]
+        for i,(lbl,key,bg,fg) in enumerate(cards):
+            card = tk.Frame(sf, bg=bg, padx=12, pady=8)
+            card.grid(row=0, column=i, padx=3, sticky=tk.NSEW)
+            sf.columnconfigure(i, weight=1)
+            tk.Label(card, text=lbl, font=F['mlbl'], bg=bg, fg=fg).pack(anchor=tk.W)
+            lb = tk.Label(card, text="—", font=F['metric'], bg=bg, fg=fg)
+            lb.pack(anchor=tk.W, pady=(2,0))
+            self.sl[key] = lb
+        # Treeview (fills remaining space between params and summary)
         tf = tk.Frame(t, bg=C['bg']); tf.pack(fill=tk.BOTH, expand=True, padx=16, pady=(4,8))
         cols = ("#","Date","From","To","Order nr","Price EUR","Full trip","PLN")
         self.tree = ttk.Treeview(tf, columns=cols, show="headings", height=12)
@@ -250,32 +277,11 @@ class TransportGUI:
         self.ctx.add_command(label="Move down", command=self._move_down)
         self.ctx.add_separator()
         self.ctx.add_command(label="Copy row", command=self._copy_row)
+        self.ctx.add_separator()
+        self.ctx.add_command(label="Move to another week", command=self._move_to_week)
+        self.ctx.add_command(label="Copy to another week", command=self._copy_to_week)
         self.tree.bind("<Button-2>" if sys.platform=="darwin" else "<Button-3>", self._ctx_show)
         self.tree.bind("<Double-1>", lambda e: self._edit_ord())
-        # Summary cards
-        sf = tk.Frame(t, bg=C['bg']); sf.pack(fill=tk.X, padx=16, pady=(0,8))
-        self.sl = {}
-        cards = [("SUMA EUR","suma_eur",C['okb'],C['okt']),
-                 ("SUMA PO AUT","suma_po_aut_eur",C['okb'],C['okt']),
-                 ("STAWKA /km","stawka_eur",C['infb'],C['inft']),
-                 ("PO AUT /km","po_aut_eur",C['infb'],C['inft']),
-                 ("SPALANIE","fuel_consumption",C['wrnb'],C['wrnt']),
-                 ("AUTO DE EUR","auto_de_eur",C['wrnb'],C['wrnt'])]
-        for i,(lbl,key,bg,fg) in enumerate(cards):
-            card = tk.Frame(sf, bg=bg, padx=12, pady=8)
-            card.grid(row=0, column=i, padx=3, sticky=tk.NSEW)
-            sf.columnconfigure(i, weight=1)
-            tk.Label(card, text=lbl, font=F['mlbl'], bg=bg, fg=fg).pack(anchor=tk.W)
-            lb = tk.Label(card, text="—", font=F['metric'], bg=bg, fg=fg)
-            lb.pack(anchor=tk.W, pady=(2,0))
-            self.sl[key] = lb
-        # Bottom
-        bt = tk.Frame(t, bg=C['bg']); bt.pack(fill=tk.X, padx=16, pady=(0,12))
-        tk.Button(bt, text="Export CSV", command=self._csv, **_sbtn()).pack(side=tk.LEFT, padx=(0,6))
-        tk.Button(bt, text="Export JSON", command=self._json, **_sbtn()).pack(side=tk.LEFT, padx=(0,6))
-        tk.Button(bt, text="Sort by date", command=self._sort_by_date, **_sbtn()).pack(side=tk.LEFT, padx=(0,6))
-        tk.Button(bt, text="Print", command=self._print_table, **_sbtn()).pack(side=tk.LEFT)
-        tk.Button(bt, text="Add order", command=self._add_ord, **_pbtn()).pack(side=tk.RIGHT)
 
     # ═══════ TAB 3: STATISTICS ═══════
     def _t3(self):
@@ -421,9 +427,8 @@ class TransportGUI:
             for wid_str in ids:
                 parsed = self.db.parse_week_identifier(wid_str)
                 if parsed:
-                    wy, wm, ws, we = parsed
-                    yr = wy if wy else today.year
-                    if yr == today.year and wm == today.month and ws <= today.day <= we:
+                    wk_mon, wk_sun = parsed
+                    if wk_mon <= today <= wk_sun:
                         best = wid_str; break
             self.wk_var.set(best)
         else: self.wk_var.set(''); self._clr()
@@ -676,6 +681,72 @@ class TransportGUI:
         if not sel: return
         vals = self.tree.item(sel[0],'values')
         self.window.clipboard_clear(); self.window.clipboard_append("\t".join(str(v) for v in vals))
+
+    def _pick_week_dialog(self, title, callback):
+        """Show a dialog to pick a destination week, then call callback(week_table_id)."""
+        sel = self.tree.selection()
+        if not sel or not self._current_wt_id: return
+        oid = int(sel[0])
+        p = self.trk_var.get()
+        if not p or p == 'Select truck...': return
+        tr = self.db.get_truck_by_plate(p)
+        if not tr: return
+        wks = self.db.get_week_tables(tr['id'])
+        # Exclude current week
+        other = [(w['id'], w['week_identifier']) for w in wks if w['id'] != self._current_wt_id]
+        if not other:
+            messagebox.showinfo("No other weeks", "There are no other weeks for this truck.")
+            return
+        dlg = self._make_dlg(title, "400x300")
+        tk.Label(dlg, text="Select destination week:", font=F['h3'],
+                 bg=C['bg'], fg=C['tx']).pack(padx=20, pady=(16,8), anchor=tk.W)
+        lb = tk.Listbox(dlg, font=F['body'], height=8, bg=C['bg'], fg=C['tx'],
+                        selectbackground=C['sel'], selectforeground=C['self'],
+                        relief=tk.FLAT, highlightthickness=1, highlightbackground=C['brd2'])
+        for wid, wname in other:
+            lb.insert(tk.END, wname)
+        lb.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0,8))
+        if other: lb.selection_set(0)
+        def on_ok():
+            idx = lb.curselection()
+            if not idx: return
+            target_id = other[idx[0]][0]
+            dlg.destroy()
+            callback(oid, target_id)
+        bf = tk.Frame(dlg, bg=C['bg'], pady=12); bf.pack()
+        tk.Button(bf, text="Confirm", command=on_ok, **_pbtn()).pack(side=tk.LEFT, padx=8)
+        tk.Button(bf, text="Cancel", command=dlg.destroy, **_sbtn()).pack(side=tk.LEFT, padx=8)
+
+    def _move_to_week(self):
+        def do_move(oid, target_wt_id):
+            # Get order data, add to target, delete from current
+            ords = self.db.get_orders_by_week(self._current_wt_id)
+            o = next((x for x in ords if x['id']==oid), None)
+            if not o: return
+            data = {k: o[k] for k in ('zlecenie_nr','termin_rozladunku','miejsce_zaladunku',
+                    'miejsce_rozladunku','fracht_eur','full_trip_price','source_file','is_storno')}
+            ok, msg = self.db.add_order(target_wt_id, data)
+            if ok:
+                self.db.delete_order(oid)
+                self._load_ord(self._current_wt_id); self._upd_sum(self._current_wt_id)
+                messagebox.showinfo("Moved", f"Order moved successfully.")
+            else:
+                messagebox.showerror("Error", f"Failed to move: {msg}")
+        self._pick_week_dialog("Move to another week", do_move)
+
+    def _copy_to_week(self):
+        def do_copy(oid, target_wt_id):
+            ords = self.db.get_orders_by_week(self._current_wt_id)
+            o = next((x for x in ords if x['id']==oid), None)
+            if not o: return
+            data = {k: o[k] for k in ('zlecenie_nr','termin_rozladunku','miejsce_zaladunku',
+                    'miejsce_rozladunku','fracht_eur','full_trip_price','source_file','is_storno')}
+            ok, msg = self.db.add_order(target_wt_id, data)
+            if ok:
+                messagebox.showinfo("Copied", f"Order copied successfully.")
+            else:
+                messagebox.showerror("Error", f"Failed to copy: {msg}")
+        self._pick_week_dialog("Copy to another week", do_copy)
 
     def _add_ord(self):
         if not self._current_wt_id: messagebox.showwarning("No week","Select a truck and week first."); return
