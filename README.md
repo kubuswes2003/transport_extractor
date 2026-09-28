@@ -1,99 +1,91 @@
 # Transport Extractor
 
-Desktop application for extracting structured data from Polish/German transport PDF orders, storing in SQLite, and displaying in a professional tabbed GUI.
+A desktop tool that reads Polish and German freight orders from PDF, pulls out the fields that matter, stores them in SQLite and shows weekly per-truck summaries.
 
-## Features
+## Context
 
-- **PDF extraction** — automated parsing of transport orders (Speditionsauftrag) using regex + spaCy NLP
-- **Bilingual support** — handles both Polish and German transport documents
-- **SQLite database** — local storage with 3-table schema (trucks → weeks → orders)
-- **Tabbed GUI** — Processing, Database, and Statistics tabs with modern design
-- **Weekly summaries** — auto-calculated SPALANIE, STAWKA, SUMA, AUTO DE values
-- **Google Sheets export** — optional secondary export target
-- **Print** — generates printable HTML reports per truck/week
-- **Cross-platform** — works on macOS and Windows
+Built for a small transport company and **in daily use there**. Before it existed, order details were retyped by hand from PDFs into a spreadsheet — one row per order, several dozen per week, across a handful of trucks.
 
-## Screenshots
+Solo project, written alongside my studies.
 
-*Coming soon*
+The orders themselves are client documents, so **no PDFs, database files or extraction output are part of this repository** — they are git-ignored, and the repository has never contained any. What you see here is the tool, not the data.
 
-## Quick Start (Windows)
+## What it does
 
-```bat
-1. Clone the repo:     git clone https://github.com/kubuswes2003/transport_extractor.git
-2. Run setup:          setup_windows.bat
-3. Copy PDFs:          put your PDF files into the 'pdfs/' folder
-4. Copy credentials:   put credentials.json into 'utils/' folder (for Google Sheets)
-5. Launch:             run_gui.bat
+```
+PDF orders  →  text extraction  →  regex fields + spaCy city detection
+            →  validation & grouping by truck/week  →  SQLite  →  GUI / printable report
+                                                              ↘  Google Sheets (optional)
 ```
 
-## Quick Start (macOS)
+The documents come from different forwarders in two languages, so a single fixed-layout parser was never an option. Each field has a list of candidate patterns tried in order — an order number appears as `Zlecenie Nr.` in Polish documents and `Speditionsauftrag Nr.` in German ones, unloading dates as `Termin rozładunku` or `Entladetermin`, and so on.
+
+Loading and unloading **cities** are the awkward part: they sit in free-form address blocks rather than labelled fields. Those are handled with spaCy NER (`pl_core_news_sm`, `de_core_news_sm`) over the relevant section of the document, instead of trying to write a regex for every address format.
+
+Extracted orders are grouped by **truck** and **week**, and the weekly figures (fuel, rate, totals, German motorway share) are computed per group. The GUI has three tabs — processing, database browser and statistics — and can print a per-truck weekly report.
+
+## Tech stack
+
+Python 3.10+ · tkinter · SQLite (WAL) · PyPDF2 · spaCy · matplotlib · gspread (optional export)
+
+## Repository layout
+
+```
+extractors/
+├── pdf_reader.py            # PDF → text
+├── regex_extractor.py       # field extraction, PL + DE patterns
+├── city_extractor.py        # city detection via spaCy NER
+├── data_processor.py        # validation, grouping by truck/week
+└── google_sheets_exporter.py
+database/db_manager.py       # SQLite schema: trucks → week_tables → orders
+utils/                       # helpers, Sheets connectivity check
+gui.py                       # tkinter GUI (processing / database / statistics)
+main.py                      # CLI entry point
+config.py                    # all configuration constants
+setup_windows.bat            # one-click setup on the company's Windows machine
+```
+
+## Running it
 
 ```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-
-# Download spaCy models
 python -m spacy download pl_core_news_sm
 python -m spacy download de_core_news_sm
 
-# Create folders
-mkdir -p pdfs
-
-# Run
-python gui.py        # GUI mode
-python main.py       # CLI mode
+mkdir -p pdfs        # put the PDFs to process here
+python gui.py        # GUI
+python main.py       # CLI
 ```
 
-## Project Structure
+On Windows, `setup_windows.bat` does the same in one step and `run_gui.bat` starts the GUI.
 
-```
-transport_extractor/
-├── extractors/              # PDF parsing & data extraction
-│   ├── pdf_reader.py        # PDF text extraction (PyPDF2)
-│   ├── regex_extractor.py   # Field extraction via regex
-│   ├── city_extractor.py    # City detection (spaCy NLP)
-│   ├── data_processor.py    # Grouping & validation
-│   └── google_sheets_exporter.py
-├── database/
-│   └── db_manager.py        # SQLite manager (3-table schema)
-├── utils/
-│   └── helpers.py           # CLI utilities
-├── config.py                # All configuration constants
-├── gui.py                   # Tkinter tabbed GUI
-├── main.py                  # CLI entry point
-├── requirements.txt
-├── setup_windows.bat        # Windows one-click setup
-├── run_gui.bat              # Windows GUI launcher
-└── run_cli.bat              # Windows CLI launcher
+Google Sheets export is off by default (`ENABLE_SHEETS_EXPORT`). To use it, put a service-account `credentials.json` in `utils/` and point the tool at a spreadsheet:
+
+```bash
+export GOOGLE_SHEET_ID=<spreadsheet id>
 ```
 
 ## Configuration
 
-Edit `config.py` to customize:
+| Setting | Default | Meaning |
+|---|---|---|
+| `DB_PATH` | `transport_orders.db` | SQLite file |
+| `DEFAULT_EUR_PLN_RATE` | `4.25` | EUR → PLN rate used in summaries |
+| `AUTOBAHN_RATE_PER_KM` | `0.35` | German motorway cost per km (EUR) |
+| `FRACHT_MIN` / `FRACHT_MAX` | `50` / `5000` | sanity range for freight price |
+| `ENABLE_SHEETS_EXPORT` | `False` | optional Sheets export |
+| `GOOGLE_SHEET_ID` | *(from environment)* | target spreadsheet |
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `DB_PATH` | `transport_orders.db` | SQLite database file path |
-| `DEFAULT_EUR_PLN_RATE` | `4.25` | EUR to PLN exchange rate |
-| `AUTOBAHN_RATE_PER_KM` | `0.35` | German highway cost per km (EUR) |
-| `ENABLE_SHEETS_EXPORT` | `False` | Enable Google Sheets export |
-| `PDFS_FOLDER` | `pdfs` | Folder with input PDFs |
+## Limitations and what I would improve
 
-## Tech Stack
-
-- **Python 3.10+**
-- **tkinter** — desktop GUI
-- **SQLite** — local database (WAL mode)
-- **PyPDF2** — PDF text extraction
-- **spaCy** — NLP city detection (pl_core_news_sm, de_core_news_sm)
-- **matplotlib** — statistics charts
-- **gspread** — Google Sheets API (optional)
+- **Pattern-based, not learned.** A forwarder who changes their template breaks the corresponding patterns until they are extended, and an extracted field carries no confidence score.
+- **Text-layer PDFs only.** Scanned orders would need OCR, which is not wired in.
+- **The exchange rate is a constant**, not fetched from a rates API, so past weeks are valued at today's number.
+- **Thin test coverage.** Week-boundary logic deserves the most tests, since orders that straddle a weekend decide which week they land in.
+- No packaging — it runs from source on the target machine rather than as a signed executable.
+- Code comments, GUI labels and log messages are in Polish.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

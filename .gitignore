@@ -4,11 +4,15 @@ credentials.json
 *.pem
 *.key
 
-# Database
+# Database (contains real client orders — never commit)
 *.db
 *.db-shm
 *.db-wal
 transport_orders.db
+*.bak
+*.bak-*
+*.db.bak*
+transport_orders.db.bak*
 
 # PDFs (client data — sensitive)
 pdfs/
@@ -28,6 +32,9 @@ __pycache__/
 dist/
 build/
 *.egg
+
+# Packaged builds / bundled virtualenvs
+*.zip
 
 # Virtual environments
 venv/

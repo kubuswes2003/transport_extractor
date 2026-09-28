@@ -30,8 +30,8 @@ class RegexExtractor:
     def _extract_order_number(self, text, verbose=False):
         """Extract order number (format: XX/XXXXΑ)
         
-        Polish: Zlecenie Nr. 25/3661A
-        German: Speditionsauftrag Nr. 25/3661A
+        Polish: Zlecenie Nr. 25/0000X
+        German: Speditionsauftrag Nr. 25/0000X
         """
         patterns = [
             r'Zlecenie\s+Nr\.?\s*(\d{2}/\d{4}[A-Z])',

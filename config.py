@@ -28,6 +28,10 @@ DEFAULT_EUR_PLN_RATE = 4.25
 AUTOBAHN_RATE_PER_KM = 0.35
 
 # Google Sheets configuration
-GOOGLE_SHEET_ID = "1Xx-LfKeg2tG1cwm5wdMHW7AQGID3a0-7zs4ufQ7iwKU"
-CREDENTIALS_FILE = os.path.join("utils", "credentials.json")
+# The spreadsheet is company-internal, so its id comes from the environment
+# rather than from this file.
+GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
+CREDENTIALS_FILE = os.getenv(
+    "GOOGLE_CREDENTIALS_FILE", os.path.join("utils", "credentials.json")
+)
 ENABLE_SHEETS_EXPORT = False  # SQLite is now primary storage
