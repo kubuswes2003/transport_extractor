@@ -59,3 +59,7 @@ gui_config.json
 
 # Temp print files
 transport_print_*.html
+
+# Unmasked source screenshots (contain real order numbers)
+screenshots_repo/
+shot_of_deployment.png

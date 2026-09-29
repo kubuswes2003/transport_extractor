@@ -24,6 +24,18 @@ Loading and unloading **cities** are the awkward part: they sit in free-form add
 
 Extracted orders are grouped by **truck** and **week**, and the weekly figures (fuel, rate, totals, German motorway share) are computed per group. The GUI has three tabs — processing, database browser and statistics — and can print a per-truck weekly report.
 
+## Screenshots
+
+**Processing** — a folder of PDFs goes in; each file is parsed, checked against the database and either saved or reported as a duplicate.
+
+![Processing tab](docs/gui-processing.png)
+
+**Database** — orders for one truck in a selected week, the week's parameters (distance, fuel, share driven in Germany, exchange rate) and the computed summary along the bottom.
+
+![Database tab](docs/gui-database.png)
+
+Routes, order numbers and the registration plate are masked in these screenshots: the real entries are client data.
+
 ## Tech stack
 
 Python 3.10+ · tkinter · SQLite (WAL) · PyPDF2 · spaCy · matplotlib · gspread (optional export)
